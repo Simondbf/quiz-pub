@@ -1,0 +1,168 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="dark light">
+<title>Quiz Pub</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%2317202e'/%3E%3Crect x='6' y='9' width='20' height='14' rx='2' fill='none' stroke='%23f2b441' stroke-width='2.4'/%3E%3Cpath d='M14 13.5v5l4.5-2.5z' fill='%23f2b441'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div id="app">
+
+<!-- ------------------------------ Connexion ------------------------------ -->
+<main id="vue-connexion" class="vue connexion" hidden>
+  <form id="form-connexion" class="carte-connexion">
+    <h1 class="logo">Quiz <span>Pub</span></h1>
+    <label class="champ"><span>Mot de passe</span>
+      <input type="password" id="mdp" autocomplete="current-password" required></label>
+    <button class="bouton principal" type="submit">Entrer</button>
+    <p class="message erreur" id="connexion-erreur" role="alert"></p>
+  </form>
+</main>
+
+<!-- ------------------------------ Bibliothèque ------------------------------ -->
+<div id="vue-biblio" class="vue" hidden>
+  <header class="barre">
+    <a class="logo" href="#/">Quiz <span>Pub</span></a>
+    <button class="lien" type="button" data-action="deconnexion">Se déconnecter</button>
+  </header>
+  <main class="page">
+    <section class="ajout">
+      <h2>Ajouter une compilation</h2>
+      <form id="form-lien" class="ligne-lien">
+        <label class="cache" for="lien">Adresse de la vidéo</label>
+        <input type="url" id="lien" placeholder="https://www.youtube.com/watch?v=…" autocomplete="off" required>
+        <button class="bouton principal" type="submit">Télécharger</button>
+      </form>
+      <div class="ou">
+        <span>ou</span>
+        <label class="bouton" for="fichier">Envoyer une vidéo depuis cet appareil</label>
+        <input class="cache" type="file" id="fichier" accept="video/*,.mkv,.ts">
+      </div>
+      <div id="envoi" class="envoi" hidden>
+        <div class="barre-progres"><div></div></div>
+        <span id="envoi-texte"></span>
+      </div>
+      <p class="message" id="ajout-message" role="status"></p>
+    </section>
+
+    <section>
+      <h2>Vidéos</h2>
+      <ul id="liste-videos" class="liste-videos"></ul>
+      <p id="liste-vide" class="discret" hidden>Aucune vidéo pour l'instant. Colle l'adresse d'une compilation de pubs sur YouTube.</p>
+    </section>
+
+    <footer class="systeme">
+      <span id="versions" class="discret"></span>
+      <button class="lien" type="button" id="maj-ytdlp">Mettre à jour yt-dlp</button>
+      <span id="maj-message" class="discret" role="status"></span>
+    </footer>
+  </main>
+</div>
+
+<!-- ------------------------------ Montage ------------------------------ -->
+<div id="vue-montage" class="vue" hidden>
+  <header class="barre">
+    <a class="retour" href="#/">Toutes les vidéos</a>
+    <h1 id="titre-video" class="titre-video"></h1>
+    <span id="sauvegarde" class="discret" role="status"></span>
+  </header>
+
+  <div id="montage-attente" class="page" hidden>
+    <div class="attente">
+      <p id="attente-texte" class="attente-texte"></p>
+      <div class="barre-progres" id="attente-barre"><div></div></div>
+      <div class="actions" id="attente-actions"></div>
+    </div>
+  </div>
+
+  <main id="montage" class="montage" hidden>
+    <div class="colonne-video">
+      <div class="ecran" id="ecran">
+        <video id="video" preload="auto" playsinline></video>
+        <div class="calque" id="calque" aria-hidden="true"></div>
+      </div>
+      <div class="transport">
+        <button class="bouton petit" type="button" data-action="image-prec" title="Image précédente (←)">−1 image</button>
+        <button class="bouton principal lecture" type="button" data-action="lecture" id="bouton-lecture" title="Lecture (Espace)">Lire</button>
+        <button class="bouton petit" type="button" data-action="image-suiv" title="Image suivante (→)">+1 image</button>
+        <span class="temps" id="temps">0:00.00</span>
+        <span class="espace"></span>
+        <button class="bouton petit" type="button" data-action="coupe-prec" title="Coupe précédente (↑)">Coupe préc.</button>
+        <button class="bouton petit" type="button" data-action="coupe-suiv" title="Coupe suivante (↓)">Coupe suiv.</button>
+      </div>
+      <canvas id="frise" class="frise" aria-label="Frise de la vidéo : pubs, révélations et coupes. Touche pour aller à un moment."></canvas>
+      <p class="legende-frise"><i class="l-debut"></i>début de pub <i class="l-revel"></i>révélation <i class="l-coupe"></i>coupe repérée</p>
+    </div>
+
+    <div class="colonne-outils">
+      <nav class="onglets" role="tablist" aria-label="Outils de montage">
+        <button role="tab" id="o-pubs" aria-controls="p-pubs" aria-selected="true">Pubs</button>
+        <button role="tab" id="o-masques" aria-controls="p-masques" aria-selected="false" tabindex="-1">Masques</button>
+        <button role="tab" id="o-export" aria-controls="p-export" aria-selected="false" tabindex="-1">Export</button>
+      </nav>
+
+      <section id="p-pubs" role="tabpanel" aria-labelledby="o-pubs" class="panneau">
+        <p class="discret">Le quiz fige l'image juste avant la <b>révélation</b>, le moment où la marque apparaît. Vérifie chaque pub : les révélations marquées « à vérifier » ont été estimées.</p>
+        <ol id="liste-pubs" class="liste-pubs"></ol>
+        <div class="actions" id="actions-generales"></div>
+        <details class="raccourcis">
+          <summary>Raccourcis clavier</summary>
+          <p>Espace : lecture ou pause. Flèches gauche et droite : une image (avec Maj : une seconde). Flèches haut et bas : coupe précédente ou suivante. D, R, F : placer le début, la révélation ou la fin de la pub choisie au curseur. C : couper la pub au curseur.</p>
+        </details>
+      </section>
+
+      <section id="p-masques" role="tabpanel" aria-labelledby="o-masques" class="panneau" hidden>
+        <p class="discret">Les masques cachent les textes gênants de la vidéo d'origine : logo de la chaîne, « Pub 3 », année… Ceux trouvés à l'analyse sont déjà en place, retire ceux qui ne servent à rien.</p>
+        <div class="actions">
+          <button class="bouton principal" type="button" id="dessiner" aria-pressed="false">Dessiner un masque</button>
+        </div>
+        <p id="aide-dessin" class="aide" hidden>Trace un rectangle sur l'image, par-dessus le texte à cacher.</p>
+        <ol id="liste-masques" class="liste-masques"></ol>
+      </section>
+
+      <section id="p-export" role="tabpanel" aria-labelledby="o-export" class="panneau" hidden>
+        <div class="bloc-export">
+          <h2>Quiz monté</h2>
+          <p class="discret">Chaque pub jusqu'à la révélation, puis l'image figée avec la question et un compte à rebours, puis la révélation.</p>
+          <label class="champ"><span>Question ({n} devient le numéro de la pub)</span>
+            <input type="text" id="question" maxlength="120"></label>
+          <div class="deux">
+            <label class="champ"><span>Temps pour répondre (secondes)</span>
+              <input type="number" id="duree-question" min="1" max="30" step="1"></label>
+            <label class="case"><input type="checkbox" id="afficher-reponse"> Afficher la réponse à la révélation</label>
+          </div>
+          <p class="resume" id="resume-quiz"></p>
+          <button class="bouton principal" type="button" id="monter">Monter le quiz</button>
+        </div>
+        <div class="bloc-export">
+          <h2>Vidéo nettoyée</h2>
+          <p class="discret">La compilation entière avec les masques, pour faire ton propre montage dans DaVinci Resolve.</p>
+          <button class="bouton" type="button" id="nettoyer">Créer la vidéo nettoyée</button>
+        </div>
+        <div class="bloc-export">
+          <h2>Marqueurs pour DaVinci Resolve</h2>
+          <p class="discret">Début de chaque pub en bleu, révélation en rouge, fin en jaune. Pose la vidéo d'origine au début de la timeline, puis dans le Media Pool : clic droit sur la timeline › Timelines › Import › Timeline Markers from EDL.</p>
+          <div class="deux">
+            <label class="champ"><span>Images par seconde de la timeline</span>
+              <select id="cadence"></select></label>
+            <label class="champ"><span>Début de la timeline</span>
+              <input type="text" id="position" value="01:00:00:00" autocomplete="off"></label>
+          </div>
+          <a class="bouton" id="lien-edl" href="#" download>Télécharger les marqueurs</a>
+        </div>
+        <div class="bloc-export">
+          <h2>Fichiers produits</h2>
+          <ul id="liste-exports" class="liste-exports"></ul>
+          <p id="exports-vide" class="discret">Rien pour l'instant.</p>
+        </div>
+      </section>
+    </div>
+  </main>
+</div>
+</div>
+<script type="module" src="app.js"></script>
+</body>
+</html>

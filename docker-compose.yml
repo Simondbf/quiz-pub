@@ -1,0 +1,23 @@
+# Quiz Pub.
+#
+# Avant le premier lancement (voir README) :
+#   - copier .env.exemple en .env et choisir le mot de passe ;
+#   - mkdir -p data cookies && chown 1000:1000 data
+
+services:
+  quiz-pub:
+    build: .
+    container_name: quiz-pub
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      # Facultatif : cookies YouTube, si YouTube bloque le serveur (voir README).
+      YTDLP_COOKIES: /cookies/cookies.txt
+    volumes:
+      # Vidéos, analyses, projets et vidéos montées.
+      - ./data:/data
+      - ./cookies:/cookies:ro
+    ports:
+      # Toujours préfixer par 127.0.0.1 : sans lui, Docker ouvre le port sur
+      # Internet en passant devant le pare-feu. Seul nginx doit le joindre.
+      - "127.0.0.1:3012:3012"
