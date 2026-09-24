@@ -998,6 +998,8 @@ const annoncer = (texte) => { $('sauvegarde').textContent = texte; };
 async function router() {
   let session;
   try { session = await api('/api/session'); } catch { return; }
+  // Site sans mot de passe : rien à déconnecter.
+  document.querySelectorAll('[data-action="deconnexion"]').forEach((el) => { el.hidden = session.motDePasse === false; });
   if (!session.connecte) return montrerConnexion();
   const r = location.hash.match(/^#\/video\/([a-z0-9]{8})$/);
   if (r) {

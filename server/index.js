@@ -37,8 +37,10 @@ const empreinte = (v) => createHash('sha256').update(String(v)).digest();
 const egal = (a, b) => timingSafeEqual(empreinte(a), empreinte(b));
 
 export const creerApp = async () => {
+  // Sans mot de passe, le site est ouvert à quiconque connaît son adresse.
   const MOT_DE_PASSE = process.env.MOT_DE_PASSE || '';
-  if (MOT_DE_PASSE.length < 8) throw new Error('MOT_DE_PASSE manquant ou trop court (8 caractères au moins) : voir .env.exemple');
+  const OUVERT = MOT_DE_PASSE === '';
+  if (!OUVERT && MOT_DE_PASSE.length < 8) throw new Error('MOT_DE_PASSE trop court (8 caractères au moins), ou laissé vide pour un site sans mot de passe : voir .env.exemple');
   // Changer le mot de passe déconnecte tout le monde : il entre dans la clé.
   const cle = createHmac('sha256', await lireSecret()).update(MOT_DE_PASSE).digest();
   const DUREE_SESSION = 30 * 24 * 3600 * 1000;
@@ -91,6 +93,7 @@ export const creerApp = async () => {
   const json = express.json({ limit: '2mb' });
 
   app.post('/api/connexion', json, (req, res) => {
+    if (OUVERT) return res.json({ connecte: true, motDePasse: false });
     const ip = req.ip || '?';
     const maintenant = Date.now();
     const e = (essais.get(ip) || []).filter((t) => maintenant - t < 10 * 60 * 1000);
@@ -109,9 +112,9 @@ export const creerApp = async () => {
     res.setHeader('Set-Cookie', 'qp_session=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0');
     res.json({ connecte: false });
   });
-  app.get('/api/session', (req, res) => res.json({ connecte: sessionValide(lireCookie(req, 'qp_session')) }));
+  app.get('/api/session', (req, res) => res.json({ connecte: OUVERT || sessionValide(lireCookie(req, 'qp_session')), motDePasse: !OUVERT }));
 
-  const protege = (req, res, next) => (sessionValide(lireCookie(req, 'qp_session')) ? next() : res.status(401).json({ erreur: 'Connexion requise.' }));
+  const protege = (req, res, next) => (OUVERT || sessionValide(lireCookie(req, 'qp_session')) ? next() : res.status(401).json({ erreur: 'Connexion requise.' }));
   app.use('/api', protege);
   app.use('/media', protege);
 
@@ -453,7 +456,7 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.a
   const hote = process.env.HOTE || '0.0.0.0';
   creerApp()
     .then((app) => {
-      app.listen(port, hote, () => console.log(`Quiz Pub écoute sur ${hote}:${port}`));
+      app.listen(port, hote, () => console.log(`Quiz Pub écoute sur ${hote}:${port}${process.env.MOT_DE_PASSE ? '' : ' (sans mot de passe)'}`));
       // YouTube change souvent : yt-dlp se met à jour à chaque démarrage.
       if (process.env.MAJ_YTDLP === '1') {
         executer(YTDLP, ['-U'])

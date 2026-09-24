@@ -1,6 +1,6 @@
 # Quiz Pub
 
-Un site privé, protégé par mot de passe, pour préparer des quiz de pubs :
+Un site pour préparer des quiz de pubs, protégé par un mot de passe si tu en choisis un :
 
 1. **Récupérer la vidéo** : colle un lien YouTube (le serveur la télécharge avec yt-dlp), ou envoie une vidéo depuis ton ordinateur.
 2. **Repérage automatique** : le site découpe la compilation en pubs (passages au noir, silences sur une coupe) et place dans chaque pub la **révélation**, le début du dernier plan, celui où la marque apparaît.
@@ -25,7 +25,7 @@ Ne touche pas au dossier `/root/compilationpub`, qui contient l'ancienne appli.
 ```bash
 cd /root/quiz-pub
 cp .env.exemple .env
-nano .env                      # choisir MOT_DE_PASSE
+nano .env                      # MOT_DE_PASSE : à choisir, ou vide pour un site ouvert
 mkdir -p data cookies
 chown 1000:1000 data           # le conteneur n'a pas les droits root
 docker compose up -d --build

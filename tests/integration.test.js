@@ -278,3 +278,22 @@ test('API : connexion, envoi, analyse, projet, quiz, marqueurs, suppression', { 
     serveur.close();
   }
 });
+
+test('sans mot de passe : site ouvert, rien à déconnecter', async () => {
+  const avant = process.env.MOT_DE_PASSE;
+  process.env.MOT_DE_PASSE = '';
+  try {
+    const app = await creerApp();
+    const serveur = app.listen(0, '127.0.0.1');
+    await new Promise((r) => serveur.once('listening', r));
+    const base = `http://127.0.0.1:${serveur.address().port}`;
+    const session = await (await fetch(`${base}/api/session`)).json();
+    assert.deepEqual(session, { connecte: true, motDePasse: false });
+    assert.equal((await fetch(`${base}/api/videos`)).status, 200);
+    serveur.close();
+    process.env.MOT_DE_PASSE = 'court';
+    await assert.rejects(creerApp(), /trop court/);
+  } finally {
+    process.env.MOT_DE_PASSE = avant;
+  }
+});
