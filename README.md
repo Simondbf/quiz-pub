@@ -39,43 +39,19 @@ Dans la zone DNS de `soleiljaune.be`, ajoute un enregistrement **A**
 
 ### 3. nginx et le certificat
 
-nginx ne lit pas le dossier du dépôt : le fichier doit exister dans
-`/etc/nginx/sites-available/` avant d'être activé, sinon `nginx -t` échoue.
-Ouvre-le avec `nano /etc/nginx/sites-available/quizpub.soleiljaune.be`, colle
-le contenu ci-dessous (le même que `etc/nginx/sites-available/quizpub.soleiljaune.be`
-dans le dépôt), puis enregistre (Ctrl+O, Entrée, Ctrl+X) :
-
-```nginx
-server {
-    listen 80;
-    server_name quizpub.soleiljaune.be;
-
-    # Vidéos envoyées depuis l'ordinateur : jusqu'à 4 Go.
-    client_max_body_size 5G;
-
-    location / {
-        proxy_pass http://127.0.0.1:3012;
-        proxy_http_version 1.1;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-        # Envoi et lecture des vidéos sans tampon ni coupure.
-        proxy_request_buffering off;
-        proxy_buffering off;
-        proxy_read_timeout 3600s;
-        proxy_send_timeout 3600s;
-    }
-}
-```
-
-Puis :
+Une fois l'enregistrement DNS en place, dans le dossier du site :
 
 ```bash
-ln -sf /etc/nginx/sites-available/quizpub.soleiljaune.be /etc/nginx/sites-enabled/
-nginx -t && systemctl reload nginx
-certbot --nginx -d quizpub.soleiljaune.be
+bash deploiement/nginx.sh
 ```
+
+Le script installe la configuration nginx du dépôt (`deploiement/nginx.conf`),
+obtient le certificat HTTPS au premier lancement, puis recharge nginx. Rien à
+créer à la main dans `/etc/nginx`. Si nginx refuse la configuration, l'ancienne
+est remise en place ; si le certificat est refusé, c'est presque toujours que
+l'enregistrement DNS n'est pas encore visible : attendre un peu et relancer.
+Pour changer la configuration nginx : modifier `deploiement/nginx.conf` dans le
+dépôt, puis `maj` et relancer le script.
 
 ### Mise à jour
 
