@@ -4,8 +4,8 @@
 #     qui peut envoyer une vidéo au quiz d'un clic.
 #
 # Avant le premier lancement (voir README) :
-#   - copier .env.exemple en .env ;
-#   - mkdir -p data cookies && chown 1000:1000 data
+#   mkdir -p data cookies && chown 1000:1000 data
+# Réglages facultatifs (mots de passe, conservation) : fichier .env, voir .env.exemple.
 
 services:
   quiz-pub:
