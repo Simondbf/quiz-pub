@@ -39,7 +39,11 @@ Dans la zone DNS de `soleiljaune.be`, ajoute un enregistrement **A**
 
 ### 3. nginx et le certificat
 
-Le fichier est dans le dépôt, sous `etc/nginx/sites-available/quizpub.soleiljaune.be` : il suffit de le copier au bon endroit du serveur (voir les commandes plus bas). Son contenu :
+nginx ne lit pas le dossier du dépôt : le fichier doit exister dans
+`/etc/nginx/sites-available/` avant d'être activé, sinon `nginx -t` échoue.
+Ouvre-le avec `nano /etc/nginx/sites-available/quizpub.soleiljaune.be`, colle
+le contenu ci-dessous (le même que `etc/nginx/sites-available/quizpub.soleiljaune.be`
+dans le dépôt), puis enregistre (Ctrl+O, Entrée, Ctrl+X) :
 
 ```nginx
 server {
@@ -68,7 +72,6 @@ server {
 Puis :
 
 ```bash
-cp /root/quiz-pub/etc/nginx/sites-available/quizpub.soleiljaune.be /etc/nginx/sites-available/
 ln -sf /etc/nginx/sites-available/quizpub.soleiljaune.be /etc/nginx/sites-enabled/
 nginx -t && systemctl reload nginx
 certbot --nginx -d quizpub.soleiljaune.be
