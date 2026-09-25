@@ -4,17 +4,17 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="color-scheme" content="light dark">
-<title>Téléchargement</title>
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect x='3' y='3' width='26' height='26' rx='7' fill='%231f5fbf'/%3E%3Cpath d='M16 8v12m-6-6 6 6 6-6M9 24h14' stroke='white' stroke-width='2.6' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
+<title>YT téléchargeur</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect x='3' y='3' width='26' height='26' rx='7' fill='%23d93025'/%3E%3Cpath d='M16 8v12m-6-6 6 6 6-6M9 24h14' stroke='white' stroke-width='2.6' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
 <div id="vue-connexion" class="vue" hidden>
   <main class="page etroite">
-    <h1>Téléchargement</h1>
+    <h1 class="titre-site"><span class="pastille" aria-hidden="true"></span>YT téléchargeur</h1>
     <form id="form-connexion">
       <label class="champ"><span>Mot de passe</span><input type="password" id="mdp" autocomplete="current-password" required></label>
-      <button class="bouton principal" type="submit">Entrer</button>
+      <button class="bouton principal large" type="submit">Entrer</button>
       <p id="connexion-erreur" class="erreur" role="alert"></p>
     </form>
   </main>
@@ -23,32 +23,77 @@
 <div id="vue-principale" class="vue" hidden>
   <main class="page">
     <header class="entete">
-      <h1>Téléchargement</h1>
+      <span></span>
+      <h1 class="titre-site"><span class="pastille" aria-hidden="true"></span>YT téléchargeur</h1>
       <button class="lien" type="button" id="deconnexion">Se déconnecter</button>
     </header>
-    <p class="discret">Colle le lien d'une vidéo YouTube, choisis vidéo ou musique, puis enregistre le fichier.</p>
+    <p class="sous-titre discret">Vidéos jusqu'en 4K ou musique en MP3, depuis YouTube et plus d'un millier d'autres sites. Sans publicité ni pistage : tout passe par ton serveur.</p>
 
-    <form id="form-lien" class="carte-form">
-      <label class="champ" for="lien"><span>Lien</span></label>
+    <form id="form-lien" class="carte">
+      <label class="cache" for="lien">Lien de la vidéo ou de la playlist</label>
       <div class="ligne">
-        <input type="url" id="lien" placeholder="https://www.youtube.com/watch?v=…" autocomplete="off" inputmode="url" required>
+        <input type="url" id="lien" placeholder="Colle ici le lien de la vidéo ou de la playlist" autocomplete="off" inputmode="url" required>
         <button class="bouton" type="button" id="coller" hidden>Coller</button>
       </div>
-      <div class="choix" role="radiogroup" aria-label="Que télécharger ?">
-        <label class="option"><input type="radio" name="mode" value="video" checked><span><b>Vidéo</b> MP4, jusqu'à 1080p</span></label>
-        <label class="option"><input type="radio" name="mode" value="musique"><span><b>Musique</b> MP3, avec titre et pochette</span></label>
-      </div>
-      <button class="bouton principal large" type="submit" id="lancer">Télécharger</button>
+      <button class="bouton principal large" type="submit" id="analyser">Chercher</button>
+      <p id="lien-etat" class="discret etat" aria-live="polite"></p>
       <p id="lien-erreur" class="erreur" role="alert"></p>
     </form>
 
-    <h2>Téléchargements</h2>
+    <!-- Une vidéo : aperçu et choix -->
+    <section id="apercu" class="carte" hidden aria-labelledby="apercu-titre">
+      <div class="fiche">
+        <img id="apercu-image" class="miniature" alt="" hidden>
+        <div class="fiche-texte">
+          <h2 id="apercu-titre"></h2>
+          <p id="apercu-infos" class="discret"></p>
+        </div>
+      </div>
+      <div class="onglets" role="radiogroup" aria-label="Que télécharger ?">
+        <label class="onglet"><input type="radio" name="mode" value="video" checked><span>Vidéo</span></label>
+        <label class="onglet"><input type="radio" name="mode" value="musique"><span>Musique</span></label>
+      </div>
+      <div id="choix-video" class="choix" role="radiogroup" aria-label="Définition"></div>
+      <p id="note-video" class="note discret" hidden>Au-delà de 1080p, YouTube ne fournit la vidéo qu'en VP9 : parfaite sur un PC ou un téléphone récent, parfois refusée par de vieux appareils.</p>
+      <div id="choix-musique" class="choix" role="radiogroup" aria-label="Format de la musique" hidden></div>
+      <details id="extrait" class="extrait">
+        <summary>Ne garder qu'un extrait</summary>
+        <div class="ligne">
+          <label class="champ"><span>Début</span><input type="text" id="extrait-debut" placeholder="0:00" inputmode="numeric" autocomplete="off"></label>
+          <label class="champ"><span>Fin</span><input type="text" id="extrait-fin" placeholder="la fin" inputmode="numeric" autocomplete="off"></label>
+        </div>
+        <p class="discret petit">En minutes et secondes, par exemple 1:30.</p>
+      </details>
+      <button class="bouton principal large" type="button" id="telecharger">Télécharger</button>
+      <p id="apercu-erreur" class="erreur" role="alert"></p>
+    </section>
+
+    <!-- Une playlist : les vidéos à cocher -->
+    <section id="liste-lecture" class="carte" hidden aria-labelledby="ll-titre">
+      <h2 id="ll-titre"></h2>
+      <p id="ll-infos" class="discret"></p>
+      <div class="onglets" role="radiogroup" aria-label="Que télécharger ?">
+        <label class="onglet"><input type="radio" name="ll-mode" value="video" checked><span>Vidéos</span></label>
+        <label class="onglet"><input type="radio" name="ll-mode" value="musique"><span>Musiques</span></label>
+      </div>
+      <label class="champ"><span id="ll-format-libelle">Définition</span><select id="ll-format"></select></label>
+      <div class="ligne ll-actions">
+        <button class="lien" type="button" id="ll-tout">Tout cocher</button>
+        <button class="lien" type="button" id="ll-rien">Tout décocher</button>
+      </div>
+      <ul id="ll-entrees" class="entrees"></ul>
+      <button class="bouton principal large" type="button" id="ll-telecharger">Télécharger</button>
+      <p id="ll-etat" class="discret etat" aria-live="polite"></p>
+    </section>
+
+    <h2 class="titre-liste">Téléchargements</h2>
     <p id="vide" class="discret" hidden>Rien pour l'instant.</p>
     <ul id="liste" class="liste"></ul>
 
     <footer class="pied discret">
       <p id="conservation"></p>
       <p><span id="version"></span> <button class="lien" type="button" id="maj">Mettre à jour yt-dlp</button></p>
+      <p class="petit">yt-dlp est le programme qui récupère les vidéos. YouTube change souvent sa façon de les livrer : si un téléchargement échoue d'un coup, cette mise à jour règle presque toujours le problème. Elle se fait aussi toute seule à chaque redémarrage, et sert au quiz de pub comme à ce site.</p>
       <p id="maj-message" aria-live="polite"></p>
     </footer>
   </main>

@@ -1,6 +1,6 @@
 # Deux sites, une seule image :
 #   - quiz-pub : le quiz de pubs (port 3012) ;
-#   - telechargement : vidéos et musiques YouTube à enregistrer (port 3014),
+#   - telechargement : le YT téléchargeur, vidéos et musiques à enregistrer (port 3014),
 #     qui peut envoyer une vidéo au quiz d'un clic.
 #
 # Avant le premier lancement (voir README) :
@@ -17,6 +17,8 @@ services:
       TAILLE_MAX_GO: ${TAILLE_MAX_GO:-4}
       # Facultatif : cookies YouTube, si YouTube bloque le serveur (voir README).
       YTDLP_COOKIES: /cookies/cookies.txt
+      # Un seul yt-dlp pour les deux sites : une mise à jour sert aux deux.
+      YTDLP_PARTAGE: /data/.yt-dlp/yt-dlp
     volumes:
       # Vidéos, analyses, projets et vidéos montées.
       - ./data:/data
@@ -41,6 +43,7 @@ services:
       QUIZ_URL: http://quiz-pub:3012
       QUIZ_MOT_DE_PASSE: ${MOT_DE_PASSE:-}
       YTDLP_COOKIES: /cookies/cookies.txt
+      YTDLP_PARTAGE: /data/.yt-dlp/yt-dlp
     volumes:
       - ./data:/data
       - ./cookies:/cookies:ro

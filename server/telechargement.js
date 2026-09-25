@@ -1,5 +1,7 @@
-// Site de téléchargement : une adresse YouTube (ou d'un autre site reconnu
-// par yt-dlp), une vidéo MP4 ou une musique MP3 à enregistrer.
+// YT téléchargeur : une adresse YouTube (ou d'un autre site reconnu par
+// yt-dlp), analysée d'abord (titre, définitions disponibles, liste de
+// vidéos), puis une vidéo MP4 ou une musique MP3/M4A à enregistrer, entière
+// ou en extrait.
 // Même moteur que le quiz (youtube.js) ; une vidéo téléchargée ici peut être
 // envoyée au quiz d'un clic.
 //
@@ -16,7 +18,7 @@ import { fileURLToPath } from 'node:url';
 import * as taches from './taches.js';
 import { executer, FFPROBE } from './outils.js';
 import { installerSecurite, installerConnexion } from './connexion.js';
-import { telecharger, verifierAdresse, versionYtdlp, mettreAJour, majAuDemarrage, cookiesPresents } from './youtube.js';
+import { telecharger, verifierAdresse, versionYtdlp, mettreAJour, majAuDemarrage, cookiesPresents, analyserAdresse, RESOLUTIONS, AUDIOS } from './youtube.js';
 
 const ICI = path.dirname(fileURLToPath(import.meta.url));
 
@@ -25,6 +27,31 @@ const nouvelId = () => {
   return Array.from(randomBytes(8), (b) => alphabet[b % 36]).join('');
 };
 const idValide = (id) => typeof id === 'string' && /^[a-z0-9]{8}$/.test(id);
+
+const minutes = (s) => `${Math.floor(s / 60)}:${String(Math.round(s % 60)).padStart(2, '0')}`;
+// « Vidéo 1080p », « Musique MP3 320 kbit/s », avec l'extrait s'il y en a un.
+export const libelleFormat = (m) => {
+  const base = m.mode === 'musique'
+    ? `Musique ${AUDIOS[m.audio] || AUDIOS['mp3-320']}`
+    : `Vidéo ${m.qualite === 'max' ? 'meilleure qualité' : m.qualite ? `${m.qualite === 2160 ? '4K ' : ''}${m.qualite}p` : 'MP4'}`;
+  const e = m.extrait;
+  return e ? `${base}, extrait ${minutes(e.debut ?? 0)} à ${e.fin !== null && e.fin !== undefined ? minutes(e.fin) : 'la fin'}` : base;
+};
+
+// Options envoyées par la page, vérifiées.
+export const lireOptions = (b = {}) => {
+  const mode = b.mode === 'musique' ? 'musique' : 'video';
+  const q = b.qualite === 'max' ? 'max' : Number(b.qualite);
+  const qualite = mode === 'video' ? (q === 'max' || RESOLUTIONS.includes(q) ? q : 1080) : null;
+  const audio = mode === 'musique' ? (Object.hasOwn(AUDIOS, b.audio) ? b.audio : 'mp3-320') : null;
+  const borne = (v) => (v === null || v === undefined || v === '' ? null : Number(v));
+  const debut = borne(b.debut), fin = borne(b.fin);
+  if ((debut !== null && !(debut >= 0)) || (fin !== null && !(fin > 0)) || (debut !== null && fin !== null && fin <= debut)) {
+    return { erreur: 'Extrait invalide : la fin doit venir après le début.' };
+  }
+  const extrait = debut !== null || fin !== null ? { debut: debut ?? 0, fin } : null;
+  return { mode, qualite, audio, extrait };
+};
 
 // Durée lue dans le fichier, quand le site d'origine ne l'a pas donnée.
 const dureeFichier = async (chemin) => {
@@ -97,6 +124,8 @@ export const creerApp = async ({
 
   const resume = (m) => ({
     id: m.id, url: m.url, mode: m.mode, titre: m.titre || '', etat: m.etat, message: m.message || '',
+    format: libelleFormat(m), miniature: m.miniature || null, chaine: m.chaine || '',
+    qualite: m.qualite ?? null, audio: m.audio ?? null, extrait: m.extrait ?? null,
     creee: m.creee, taille: m.taille ?? null, duree: m.duree ?? null,
     nom: m.fichier ? nomDeFichier(m.titre, path.extname(m.fichier).slice(1)) : null,
     quiz: m.quiz || null,
@@ -105,22 +134,48 @@ export const creerApp = async ({
 
   app.get('/api/telechargements', enveloppe(async (req, res) => res.json((await lister()).map(resume))));
 
+  // Analyse d'un lien avant de choisir : titre, chaîne, durée, définitions
+  // disponibles (avec leur poids), ou liste des vidéos d'une playlist.
+  let analysesEnCours = 0;
+  app.post('/api/analyse', json, enveloppe(async (req, res) => {
+    const { url, erreur } = verifierAdresse(req.body?.url);
+    if (erreur) return res.status(400).json({ erreur });
+    if (analysesEnCours >= 3) return res.status(429).json({ erreur: 'Déjà plusieurs liens en cours d\'analyse : réessaie dans un instant.' });
+    analysesEnCours++;
+    try {
+      res.json(await analyserAdresse(url, { dossierTemporaire: path.join(dossier, '.analyse') }));
+    } catch (e) {
+      res.status(422).json({ erreur: e.message });
+    } finally {
+      analysesEnCours--;
+    }
+  }));
+
   app.post('/api/telechargements', json, enveloppe(async (req, res) => {
     const { url, erreur } = verifierAdresse(req.body?.url);
     if (erreur) return res.status(400).json({ erreur });
-    const mode = req.body?.mode === 'musique' ? 'musique' : 'video';
+    const options = lireOptions(req.body);
+    if (options.erreur) return res.status(400).json({ erreur: options.erreur });
+    const { mode, qualite, audio, extrait } = options;
+    const texte = (v, max) => String(v ?? '').replace(/[\u0000-\u001f\u007f]/g, ' ').trim().slice(0, max);
+    const miniature = /^https:\/\/[^\s"'<>]+$/.test(req.body?.miniature || '') ? String(req.body.miniature).slice(0, 500) : null;
     let id;
     do { id = nouvelId(); } while (await lireMeta(id));
     await mkdir(rep(id), { recursive: true });
-    const meta = await ecrireMeta({ id, url, mode, titre: '', etat: 'attente', message: '', creee: Date.now() });
+    const meta = await ecrireMeta({
+      id, url, mode, qualite, audio, extrait, miniature,
+      titre: texte(req.body?.titre, 200), chaine: texte(req.body?.chaine, 120),
+      etat: 'attente', message: '', creee: Date.now(),
+    });
     taches.ajouter({
       type: 'telechargement', videoId: id, libelle: mode === 'musique' ? 'Téléchargement de la musique' : 'Téléchargement de la vidéo',
       travail: async ({ progres, signal }) => {
         await majMeta(id, { etat: 'telechargement' });
-        const r = await telecharger({ url, dossier: rep(id), nom: 'fichier', mode, progres, signal });
+        const r = await telecharger({ url, dossier: rep(id), nom: 'fichier', mode, qualite, audio, debut: extrait?.debut, fin: extrait?.fin ?? undefined, progres, signal });
         const chemin = path.join(rep(id), r.fichier);
         const taille = (await stat(chemin)).size;
-        await majMeta(id, { etat: 'pret', fichier: r.fichier, taille, titre: r.titre || url, duree: r.duree ?? await dureeFichier(chemin) });
+        const titre = (await lireMeta(id))?.titre || r.titre || url;
+        await majMeta(id, { etat: 'pret', fichier: r.fichier, taille, titre, duree: extrait ? await dureeFichier(chemin) : (r.duree ?? await dureeFichier(chemin)) });
         return { fichier: r.fichier };
       },
       surEchec: (message) => majMeta(id, { etat: 'erreur', message }),
@@ -206,7 +261,7 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.a
   const hote = process.env.HOTE || '0.0.0.0';
   creerApp()
     .then((app) => {
-      app.listen(port, hote, () => console.log(`Téléchargement écoute sur ${hote}:${port}${process.env.MOT_DE_PASSE ? '' : ' (sans mot de passe)'}`));
+      app.listen(port, hote, () => console.log(`YT téléchargeur écoute sur ${hote}:${port}${process.env.MOT_DE_PASSE ? '' : ' (sans mot de passe)'}`));
       majAuDemarrage();
     })
     .catch((e) => { console.error(e.message); process.exit(1); });

@@ -13,19 +13,28 @@ Un site pour préparer des quiz de pubs, protégé par un mot de passe si tu en 
 
 Les vidéos produites sont en MP4 (H.264 et AAC), lisibles partout et dans Resolve.
 
-## Le site de téléchargement
+## Le YT téléchargeur
 
-Le même dépôt fait tourner un second site, plus simple, pour qui veut seulement
-récupérer une vidéo ou une musique : on colle un lien YouTube, on choisit
-**Vidéo** (MP4 jusqu'à 1080p) ou **Musique** (MP3 avec titre et pochette), puis
-on enregistre le fichier sur son téléphone ou son ordinateur.
+Le même dépôt fait tourner un second site, **YT téléchargeur**
+(`telechargement.soleiljaune.be`), pour qui veut seulement récupérer une vidéo
+ou une musique, sans publicité ni pistage :
 
-- Il utilise le même moteur que le quiz (`server/youtube.js`) : une mise à jour de yt-dlp ou des cookies YouTube servent aux deux.
-- **Le pont vers le quiz** : une vidéo téléchargée sur ce site part dans la bibliothèque du quiz d'un clic (« Envoyer au quiz »), où elle est analysée comme les autres. Le quiz garde aussi son propre champ « lien YouTube ».
+- on colle un lien (YouTube, ou l'un du millier d'autres sites que connaît yt-dlp : TikTok, Instagram, Vimeo, SoundCloud…) ; le site le lit tout seul et montre le titre, la chaîne, la durée et l'image ;
+- **Vidéo** : toutes les définitions proposées par la vidéo, de 360p à 4K (et 8K), avec leur poids approximatif. Jusqu'en 1080p, en H.264 lisible partout ; au-delà, en VP9 ;
+- **Musique** : MP3 320, 192 ou 128 kbit/s, ou M4A dans la qualité d'origine, avec titre et pochette ;
+- **Extrait** : ne garder qu'un morceau (début et fin en minutes et secondes) ;
+- **Playlists** : toutes les vidéos à cocher, téléchargées l'une après l'autre ;
+- **Le pont vers le quiz** : une vidéo téléchargée part dans la bibliothèque du quiz d'un clic (« Envoyer au quiz »). Le quiz garde aussi son propre champ « lien YouTube ».
 - Les fichiers restent 7 jours sur le serveur, puis sont effacés (réglable avec `CONSERVATION_JOURS`).
 - Mot de passe facultatif, distinct de celui du quiz : `TELECHARGEMENT_MOT_DE_PASSE`.
 
-Code : `server/telechargement.js` et `public-telechargement/`.
+**yt-dlp**, le programme qui récupère les vidéos, est commun aux deux sites
+(une seule copie, dans `data/.yt-dlp/`). YouTube change souvent sa façon de
+livrer les vidéos : yt-dlp se met à jour à chaque démarrage des conteneurs, et
+le lien « Mettre à jour yt-dlp » (sur l'un ou l'autre site) le fait à la
+demande, par exemple quand un téléchargement échoue d'un coup.
+
+Code : `server/telechargement.js`, `server/youtube.js` et `public-telechargement/`.
 
 ## Installation sur le VPS
 
@@ -42,7 +51,7 @@ cd /root/quiz-pub
 mkdir -p data cookies
 chown 1000:1000 data           # les conteneurs n'ont pas les droits root
 docker compose up -d --build
-docker compose logs --tail 20  # « Quiz Pub écoute sur 0.0.0.0:3012 » et « Téléchargement écoute sur 0.0.0.0:3014 »
+docker compose logs --tail 20  # « Quiz Pub écoute sur 0.0.0.0:3012 » et « YT téléchargeur écoute sur 0.0.0.0:3014 »
 ```
 
 Sans rien d'autre, les deux sites sont sans mot de passe. Les réglages

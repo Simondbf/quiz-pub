@@ -125,6 +125,134 @@ test('vidéo, musique, enregistrement, envoi au quiz, suppression', { skip: saut
   assert.match(systeme.ytdlp, /^\d{4}\.\d{2}\.\d{2}/);
 });
 
+// Réponse de « yt-dlp -J » telle que YouTube la donne (abrégée).
+const reponseYoutube = {
+  id: 'abc', title: 'Concert au parc', channel: 'Chaîne Test', duration: 200, webpage_url: 'https://www.youtube.com/watch?v=abc',
+  thumbnail: 'https://i.ytimg.com/vi/abc/maxresdefault.jpg', extractor_key: 'Youtube',
+  formats: [
+    { format_id: '140', vcodec: 'none', acodec: 'mp4a.40.2', abr: 129, filesize: 3_200_000 },
+    { format_id: '251', vcodec: 'none', acodec: 'opus', abr: 135, filesize: 3_400_000 },
+    { format_id: '137', vcodec: 'avc1.640028', acodec: 'none', width: 1920, height: 1080, filesize: 60_000_000 },
+    { format_id: '248', vcodec: 'vp9', acodec: 'none', width: 1920, height: 1080, filesize: 40_000_000 },
+    { format_id: '313', vcodec: 'vp9', acodec: 'none', width: 3840, height: 2160, filesize_approx: 300_000_000 },
+    { format_id: '271', vcodec: 'vp9', acodec: 'none', width: 2560, height: 1440, tbr: 9000 },
+    { format_id: '136', vcodec: 'avc1.4d401f', acodec: 'none', width: 1280, height: 720, filesize: 20_000_000 },
+    { format_id: '18', vcodec: 'avc1.42001E', acodec: 'mp4a.40.2', width: 640, height: 360, filesize: 9_000_000 },
+    { format_id: 'sb0', vcodec: 'none', acodec: 'none', width: 160, height: 90 },
+  ],
+};
+
+test('analyse d\'un lien : définitions, poids, son, listes', async () => {
+  const { lireInfos } = await import('../server/youtube.js');
+  const v = lireInfos(reponseYoutube);
+  assert.equal(v.type, 'video');
+  assert.equal(v.titre, 'Concert au parc');
+  assert.equal(v.chaine, 'Chaîne Test');
+  assert.deepEqual(v.qualites.map((q) => q.res), [2160, 1440, 1080, 720, 360]);
+  assert.equal(v.qualites.find((q) => q.res === 1080).taille, 60_000_000 + 3_400_000, 'le plus lourd des 1080p, plus le meilleur son');
+  assert.equal(v.qualites.find((q) => q.res === 1080).h264, true);
+  assert.equal(v.qualites.find((q) => q.res === 2160).h264, false);
+  assert.equal(v.qualites.find((q) => q.res === 1440).taille, Math.round((9000 * 1000 / 8) * 200) + 3_400_000, 'poids estimé par le débit');
+  assert.equal(v.qualites.find((q) => q.res === 360).taille, 9_000_000, 'format déjà avec son : pas de son ajouté');
+  assert.deepEqual(v.son, { taille: 3_400_000 });
+  // Vidéo verticale : on parle du petit côté, comme yt-dlp.
+  const verticale = lireInfos({ title: 'Short', duration: 30, formats: [{ vcodec: 'avc1', acodec: 'none', width: 1080, height: 1920 }, { vcodec: 'none', acodec: 'opus', abr: 120 }] });
+  assert.deepEqual(verticale.qualites.map((q) => q.res), [1080]);
+  // Son seul (SoundCloud…) : pas de vidéo proposée.
+  const son = lireInfos({ title: 'Morceau', duration: 180, formats: [{ vcodec: 'none', acodec: 'mp3', abr: 128 }] });
+  assert.deepEqual([son.qualites, Boolean(son.son)], [[], true]);
+  // Playlist (réponse « à plat »).
+  const liste = lireInfos({ _type: 'playlist', title: 'Mes clips', uploader: 'Moi', entries: [
+    { ie_key: 'Youtube', id: 'x1', url: 'x1', title: 'Clip 1', duration: 180, thumbnails: [{ url: 'https://i.ytimg.com/vi/x1/hq.jpg' }] },
+    { ie_key: 'Youtube', id: 'x2', url: 'https://www.youtube.com/watch?v=x2', title: 'Clip 2' },
+    null,
+    { title: 'Sans adresse' },
+  ] });
+  assert.equal(liste.type, 'liste');
+  assert.equal(liste.nombre, 2);
+  assert.deepEqual(liste.entrees.map((e) => e.url), ['https://www.youtube.com/watch?v=x1', 'https://www.youtube.com/watch?v=x2']);
+  assert.equal(liste.entrees[0].miniature, 'https://i.ytimg.com/vi/x1/hq.jpg');
+});
+
+test('options de téléchargement : format yt-dlp, vérification, libellé', async () => {
+  const { argumentsFormat, FORMAT_VIDEO } = await import('../server/youtube.js');
+  assert.deepEqual(argumentsFormat({ mode: 'video' }), ['-f', FORMAT_VIDEO, '--merge-output-format', 'mp4'], 'le quiz garde son format');
+  assert.deepEqual(argumentsFormat({ mode: 'video', qualite: 1080 }).slice(0, 4), ['-f', 'bv*+ba/b', '-S', 'res:1080,vcodec:h264,acodec:aac']);
+  assert.equal(argumentsFormat({ mode: 'video', qualite: 2160 })[3], 'res:2160,vcodec:vp9,acodec:aac');
+  assert.equal(argumentsFormat({ mode: 'video', qualite: 'max' })[3], 'vcodec:vp9,acodec:aac');
+  assert.ok(argumentsFormat({ mode: 'musique', audio: 'mp3-192' }).join(' ').includes('--audio-format mp3 --audio-quality 192K'));
+  assert.ok(argumentsFormat({ mode: 'musique' }).join(' ').includes('--audio-quality 320K'));
+  assert.ok(argumentsFormat({ mode: 'musique', audio: 'm4a' }).join(' ').includes('--audio-format m4a'));
+  const { lireOptions, libelleFormat } = telechargement;
+  assert.deepEqual(lireOptions({ mode: 'video', qualite: '2160' }), { mode: 'video', qualite: 2160, audio: null, extrait: null });
+  assert.deepEqual(lireOptions({ mode: 'video', qualite: 999 }).qualite, 1080, 'définition inconnue : 1080p');
+  assert.deepEqual(lireOptions({ mode: 'musique', audio: 'flac' }).audio, 'mp3-320');
+  assert.deepEqual(lireOptions({ mode: 'musique', debut: 30, fin: 75 }).extrait, { debut: 30, fin: 75 });
+  assert.deepEqual(lireOptions({ fin: 20 }).extrait, { debut: 0, fin: 20 });
+  assert.ok(lireOptions({ debut: 50, fin: 40 }).erreur);
+  assert.ok(lireOptions({ debut: -3 }).erreur);
+  assert.equal(libelleFormat({ mode: 'video', qualite: 2160 }), 'Vidéo 4K 2160p');
+  assert.equal(libelleFormat({ mode: 'video', qualite: 'max' }), 'Vidéo meilleure qualité');
+  assert.equal(libelleFormat({ mode: 'musique', audio: 'm4a', extrait: { debut: 90, fin: null } }), 'Musique M4A, qualité d\'origine, extrait 1:30 à la fin');
+  assert.equal(libelleFormat({ mode: 'musique' }), 'Musique MP3 320 kbit/s');
+});
+
+test('un seul yt-dlp pour les deux sites : copié si plus récent, jamais remplacé par plus ancien', async () => {
+  const { mkdir: mk, writeFile: ecrire, chmod, readFile } = await import('node:fs/promises');
+  const dossierFaux = path.join(racine, 'faux-ytdlp');
+  await mk(dossierFaux, { recursive: true });
+  const faux = async (nom, version) => {
+    const chemin = path.join(dossierFaux, nom);
+    await ecrire(chemin, `#!/bin/sh\necho ${version}\n`);
+    await chmod(chemin, 0o755);
+    return chemin;
+  };
+  const image = await faux('image', '2026.08.19');
+  const partage = path.join(dossierFaux, 'partage', 'yt-dlp');
+  const lancerNode = (code) => executer(process.execPath, ['--input-type=module', '-e', code], {});
+  const essai = `process.env.YTDLP = ${JSON.stringify(image)}; process.env.YTDLP_PARTAGE = ${JSON.stringify(partage)};
+    const y = await import(${JSON.stringify(new URL('../server/youtube.js', import.meta.url).href)});
+    await y.preparerYtdlp(); console.log(y.cheminYtdlp(), await y.versionYtdlp());`;
+  let r = await lancerNode(essai);
+  assert.equal(r.sortie.trim(), `${partage} 2026.08.19`, r.erreurs);
+  // Le partagé est plus récent (mis à jour depuis l'autre site) : on le garde.
+  await ecrire(partage, '#!/bin/sh\necho 2026.09.30\n');
+  r = await lancerNode(essai);
+  assert.equal(r.sortie.trim(), `${partage} 2026.09.30`);
+  assert.match(await readFile(partage, 'utf8'), /2026\.09\.30/);
+});
+
+test('extrait et formats de musique, avec le vrai yt-dlp', { skip: sauter }, async () => {
+  const b = site.base;
+  const a = await appel(b, '/api/analyse', { methode: 'POST', corps: { url: `file://${video.chemin}` } });
+  assert.equal(a.statut, 200, JSON.stringify(a.json));
+  assert.equal(a.json.type, 'video');
+  assert.ok(a.json.videoInconnue && a.json.son, 'lien direct : meilleure qualité, avec le son');
+  assert.equal((await appel(b, '/api/analyse', { methode: 'POST', corps: { url: 'file:///introuvable.mp4' } })).statut, 422);
+  assert.equal((await appel(b, '/api/telechargements', { methode: 'POST', corps: { url: `file://${video.chemin}`, debut: 8, fin: 4 } })).statut, 400);
+  const extrait = await appel(b, '/api/telechargements', { methode: 'POST', corps: { url: `file://${video.chemin}`, mode: 'video', qualite: 1080, debut: 2, fin: 7, titre: 'Mon extrait' } });
+  const meilleure = await appel(b, '/api/telechargements', { methode: 'POST', corps: { url: `file://${video.chemin}`, mode: 'video', qualite: 'max' } });
+  const m4a = await appel(b, '/api/telechargements', { methode: 'POST', corps: { url: `file://${video.chemin}`, mode: 'musique', audio: 'm4a' } });
+  const mp3 = await appel(b, '/api/telechargements', { methode: 'POST', corps: { url: `file://${video.chemin}`, mode: 'musique', audio: 'mp3-128', debut: 1, fin: 4 } });
+  await taches.attendreTout();
+  const liste = (await appel(b, '/api/telechargements')).json;
+  const le = liste.find((x) => x.id === extrait.json.id), lm = liste.find((x) => x.id === m4a.json.id), l3 = liste.find((x) => x.id === mp3.json.id);
+  const lx = liste.find((x) => x.id === meilleure.json.id);
+  for (const x of [le, lm, l3, lx]) assert.equal(x.etat, 'pret', x.message);
+  assert.ok(lx.nom.endsWith('.mp4') && Math.abs(lx.duree - video.duree) < 1);
+  assert.equal(le.titre, 'Mon extrait', 'le titre vu à l\'analyse est gardé');
+  assert.equal(le.format, 'Vidéo 1080p, extrait 0:02 à 0:07');
+  assert.ok(Math.abs(le.duree - 5) < 0.5, `extrait de 5 s : ${le.duree}`);
+  assert.ok(lm.nom.endsWith('.m4a') && l3.nom.endsWith('.mp3'));
+  assert.ok(Math.abs(l3.duree - 3) < 0.5, `extrait de musique de 3 s : ${l3.duree}`);
+  const chemin = path.join(racine, 'essai-128.mp3');
+  await writeFile(chemin, Buffer.from(await (await fetch(`${b}/fichiers/${l3.id}`)).arrayBuffer()));
+  const sonde = JSON.parse((await executer(FFPROBE, ['-v', 'error', '-print_format', 'json', '-show_streams', chemin])).sortie);
+  const son = sonde.streams.find((x) => x.codec_type === 'audio');
+  assert.equal(son.codec_name, 'mp3');
+  assert.ok(Math.abs(Number(son.bit_rate) - 128000) < 5000, `débit ${son.bit_rate}`);
+});
+
 test('les fichiers anciens sont effacés au démarrage', async () => {
   const dossier = path.join(racine, 'anciens');
   for (const [id, jours] of [['vieux001', 10], ['recent01', 1]]) {
