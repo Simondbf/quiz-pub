@@ -1,4 +1,5 @@
-# Image de Quiz Pub : Node 22, ffmpeg, et yt-dlp dans sa version officielle.
+# Image commune au quiz et au site de téléchargement : Node 22, ffmpeg,
+# et yt-dlp dans sa version officielle.
 FROM node:22-bookworm-slim
 
 # ffmpeg : analyse et rendu. python3 : exigé par yt-dlp. Polices DejaVu :
@@ -21,6 +22,7 @@ COPY package.json package-lock.json ./
 RUN npm ci --omit=dev && npm cache clean --force
 COPY server ./server
 COPY public ./public
+COPY public-telechargement ./public-telechargement
 
 ENV NODE_ENV=production \
     DATA_DIR=/data \

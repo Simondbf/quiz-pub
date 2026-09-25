@@ -1,9 +1,8 @@
 // Quiz Pub : télécharger une compilation de pubs, repérer les révélations,
 // cacher les textes gênants et monter un quiz.
 import express from 'express';
-import { createHash, createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
 import { createWriteStream } from 'node:fs';
-import { mkdir, readFile, writeFile, rm, readdir, rename, stat, copyFile, access } from 'node:fs/promises';
+import { mkdir, writeFile, rm, rename, stat } from 'node:fs/promises';
 import { pipeline } from 'node:stream/promises';
 import { Transform } from 'node:stream';
 import path from 'node:path';
@@ -14,51 +13,14 @@ import * as taches from './taches.js';
 import { analyser, sonder, nouvelId } from './analyse.js';
 import { commandeNettoyee, commandeQuiz, marqueursSource, marqueursQuiz, edlPour } from './rendu.js';
 import { cadence, cadenceProche, tcVersFrames, ascii } from './temps.js';
-import { executer, FFMPEG, YTDLP, derniereLigne } from './outils.js';
+import { executer, FFMPEG, derniereLigne } from './outils.js';
+import { installerSecurite, installerConnexion } from './connexion.js';
+import { telecharger, verifierAdresse, versionYtdlp, mettreAJour, majAuDemarrage, cookiesPresents } from './youtube.js';
 
 const ICI = path.dirname(fileURLToPath(import.meta.url));
 const TAILLE_MAX = Number(process.env.TAILLE_MAX_GO || 4) * 1024 ** 3;
-const COOKIES = process.env.YTDLP_COOKIES || '';
-const TEST_FICHIERS = process.env.QP_TEST_FICHIERS === '1';
-
-/* ------------------------------ Connexion ------------------------------ */
-
-const lireSecret = async () => {
-  if (process.env.SECRET_SESSION) return process.env.SECRET_SESSION;
-  const fichier = path.join(stock.DATA_DIR, '.secret');
-  try { return (await readFile(fichier, 'utf8')).trim(); } catch { /* premier démarrage */ }
-  const s = randomBytes(32).toString('hex');
-  await mkdir(stock.DATA_DIR, { recursive: true });
-  await writeFile(fichier, s, { mode: 0o600 });
-  return s;
-};
-
-const empreinte = (v) => createHash('sha256').update(String(v)).digest();
-const egal = (a, b) => timingSafeEqual(empreinte(a), empreinte(b));
 
 export const creerApp = async () => {
-  // Sans mot de passe, le site est ouvert à quiconque connaît son adresse.
-  const MOT_DE_PASSE = process.env.MOT_DE_PASSE || '';
-  const OUVERT = MOT_DE_PASSE === '';
-  if (!OUVERT && MOT_DE_PASSE.length < 8) throw new Error('MOT_DE_PASSE trop court (8 caractères au moins), ou laissé vide pour un site sans mot de passe : voir .env.exemple');
-  // Changer le mot de passe déconnecte tout le monde : il entre dans la clé.
-  const cle = createHmac('sha256', await lireSecret()).update(MOT_DE_PASSE).digest();
-  const DUREE_SESSION = 30 * 24 * 3600 * 1000;
-  const signer = (expire) => `${expire}.${createHmac('sha256', cle).update(String(expire)).digest('base64url')}`;
-  const sessionValide = (jeton) => {
-    const [expire, sig] = String(jeton || '').split('.');
-    if (!expire || !sig || !(Number(expire) > Date.now())) return false;
-    return egal(signer(expire), jeton);
-  };
-  const lireCookie = (req, nom) => {
-    for (const morceau of String(req.headers.cookie || '').split(';')) {
-      const [k, ...v] = morceau.trim().split('=');
-      if (k === nom) return decodeURIComponent(v.join('='));
-    }
-    return '';
-  };
-  const essais = new Map();
-
   await mkdir(stock.VIDEOS, { recursive: true });
   // Ce qui était en cours au dernier arrêt ne reprendra pas tout seul.
   for (const meta of await stock.listerVideos()) {
@@ -68,55 +30,10 @@ export const creerApp = async () => {
   }
 
   const app = express();
-  app.disable('x-powered-by');
-  // Derrière nginx sur la même machine : l'adresse du visiteur vient de lui.
-  // nginx joint le conteneur par le réseau Docker (adresse privée) : on lui
-  // fait confiance pour l'adresse réelle du visiteur (limite des essais).
-  app.set('trust proxy', ['loopback', 'uniquelocal']);
-
-  app.use((req, res, next) => {
-    res.setHeader('X-Content-Type-Options', 'nosniff');
-    res.setHeader('Referrer-Policy', 'same-origin');
-    res.setHeader('X-Frame-Options', 'DENY');
-    // Refuse les requêtes d'écriture venues d'un autre site.
-    if (!['GET', 'HEAD'].includes(req.method)) {
-      const origine = req.headers.origin;
-      if (origine) {
-        let hote = '';
-        try { hote = new URL(origine).host; } catch { /* origine illisible */ }
-        if (hote !== req.headers.host) return res.status(403).json({ erreur: 'Origine refusée.' });
-      }
-    }
-    next();
-  });
-
+  installerSecurite(app);
   const json = express.json({ limit: '2mb' });
 
-  app.post('/api/connexion', json, (req, res) => {
-    if (OUVERT) return res.json({ connecte: true, motDePasse: false });
-    const ip = req.ip || '?';
-    const maintenant = Date.now();
-    const e = (essais.get(ip) || []).filter((t) => maintenant - t < 10 * 60 * 1000);
-    if (e.length >= 8) return res.status(429).json({ erreur: 'Trop d\'essais. Réessaie dans quelques minutes.' });
-    if (!egal(req.body?.motDePasse ?? '', MOT_DE_PASSE)) {
-      e.push(maintenant);
-      essais.set(ip, e);
-      return res.status(401).json({ erreur: 'Mot de passe incorrect.' });
-    }
-    essais.delete(ip);
-    const securise = req.secure || req.headers['x-forwarded-proto'] === 'https';
-    res.setHeader('Set-Cookie', `qp_session=${signer(maintenant + DUREE_SESSION)}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${DUREE_SESSION / 1000}${securise ? '; Secure' : ''}`);
-    res.json({ connecte: true });
-  });
-  app.post('/api/deconnexion', (req, res) => {
-    res.setHeader('Set-Cookie', 'qp_session=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0');
-    res.json({ connecte: false });
-  });
-  app.get('/api/session', (req, res) => res.json({ connecte: OUVERT || sessionValide(lireCookie(req, 'qp_session')), motDePasse: !OUVERT }));
-
-  const protege = (req, res, next) => (OUVERT || sessionValide(lireCookie(req, 'qp_session')) ? next() : res.status(401).json({ erreur: 'Connexion requise.' }));
-  app.use('/api', protege);
-  app.use('/media', protege);
+  await installerConnexion(app, { dossier: stock.DATA_DIR, cookie: 'qp_session', protegees: ['/api', '/media'] });
 
   const avecId = (req, res, next) => (stock.idValide(req.params.id) ? next() : res.status(404).json({ erreur: 'Vidéo introuvable.' }));
   const enveloppe = (f) => (req, res, next) => Promise.resolve(f(req, res, next)).catch(next);
@@ -144,73 +61,15 @@ export const creerApp = async () => {
     surEchec: (erreur) => stock.majMeta(id, { etat: 'erreur', message: erreur }),
   });
 
-  const messageYtdlp = (texte) => {
-    const lignes = String(texte).split(/\r?\n/).filter((l) => l.startsWith('ERROR'));
-    const brut = (lignes.pop() || derniereLigne(texte)).replace(/^ERROR:\s*/, '');
-    if (/confirm you.?re not a bot|Sign in to confirm/i.test(brut)) {
-      return 'YouTube bloque ce serveur (« confirmez que vous n\'êtes pas un robot »). Ajoute un fichier cookies.txt (voir README), ou envoie la vidéo depuis ton ordinateur.';
-    }
-    if (/Video unavailable|Private video|This video is private/i.test(brut)) return 'Vidéo indisponible ou privée.';
-    return `Téléchargement impossible : ${brut}`;
-  };
-
-  const FORMAT = 'bv*[vcodec^=avc1][height<=1080]+ba[acodec^=mp4a]/b[ext=mp4][vcodec^=avc1][height<=1080]/bv*[height<=1080]+ba/b';
-
   const lancerTelechargement = (id, url) => taches.ajouter({
     type: 'telechargement', videoId: id, libelle: 'Téléchargement',
     travail: async ({ progres, signal }) => {
       await stock.majMeta(id, { etat: 'telechargement', message: '' });
-      const rep = stock.dossier(id);
-      let infos = null;
-      let fichierNumero = 0;
-      let dernier = 0;
-      // yt-dlp réécrit le fichier de cookies à la fin : on lui en donne une
-      // copie, l'original peut rester en lecture seule.
-      let cookies = '';
-      if (COOKIES && await access(COOKIES).then(() => true, () => false)) {
-        cookies = path.join(rep, '.cookies.txt');
-        await copyFile(COOKIES, cookies);
-      }
-      const args = [
-        '--no-playlist', '--no-mtime', '--newline', '--no-colors',
-        '--js-runtimes', 'node',
-        '-f', FORMAT, '--merge-output-format', 'mp4',
-        '-o', path.join(rep, 'source.%(ext)s'),
-        '--print', 'after_move:%(.{id,title,duration,filepath})j',
-        '--progress', '--progress-template', 'download:QPPROG %(progress._percent_str)s',
-        ...(cookies ? ['--cookies', cookies] : []),
-        ...(TEST_FICHIERS ? ['--enable-file-urls'] : []),
-        '--', url,
-      ];
-      progres(0, 'Préparation du téléchargement');
-      const { code, erreurs, sortie } = await executer(YTDLP, args, {
-        signal,
-        garder: 60000,
-        surLigne: (l) => {
-          const m = l.match(/QPPROG\s+([\d.]+)%/);
-          if (m) {
-            const p = Number(m[1]) / 100;
-            if (p + 0.2 < dernier) fichierNumero++;
-            dernier = p;
-            progres(p, fichierNumero ? 'Téléchargement du son' : 'Téléchargement');
-          } else if (l.trim().startsWith('{')) {
-            try { infos = JSON.parse(l); } catch { /* ligne incomplète */ }
-          } else if (/\[Merger\]|\[VideoConvertor\]|\[FixupM3u8\]/.test(l)) {
-            progres(1, 'Assemblage de l\'image et du son');
-          }
-        },
-      });
-      if (cookies) await rm(cookies, { force: true });
-      if (code !== 0) throw new Error(messageYtdlp(`${erreurs}\n${sortie}`));
-      // Retrouve le fichier produit, même si la ligne d'information manque.
-      const noms = (await readdir(rep)).filter((n) => n.startsWith('source.') && !n.endsWith('.part') && !n.endsWith('.ytdl'));
-      const fichier = infos?.filepath && noms.includes(path.basename(infos.filepath)) ? path.basename(infos.filepath) : noms[0];
-      if (!fichier) throw new Error('Le téléchargement n\'a produit aucun fichier.');
-      const taille = (await stat(path.join(rep, fichier))).size;
-      const titre = String(infos?.title || '').slice(0, 200);
-      await stock.majMeta(id, { fichier, taille, ...(titre ? { titre } : {}), etat: 'attente' });
+      const r = await telecharger({ url, dossier: stock.dossier(id), nom: 'source', mode: 'video', progres, signal });
+      const taille = (await stat(path.join(stock.dossier(id), r.fichier))).size;
+      await stock.majMeta(id, { fichier: r.fichier, taille, ...(r.titre ? { titre: r.titre } : {}), etat: 'attente' });
       lancerAnalyse(id);
-      return { fichier };
+      return { fichier: r.fichier };
     },
     surEchec: (erreur) => stock.majMeta(id, { etat: 'erreur', message: erreur }),
   });
@@ -268,13 +127,10 @@ export const creerApp = async () => {
   }));
 
   app.post('/api/videos/youtube', json, enveloppe(async (req, res) => {
-    const brut = String(req.body?.url || '').trim();
-    let url;
-    try { url = new URL(brut); } catch { return res.status(400).json({ erreur: 'Adresse invalide.' }); }
-    const permis = ['http:', 'https:', ...(TEST_FICHIERS ? ['file:'] : [])];
-    if (!permis.includes(url.protocol) || brut.length > 2000) return res.status(400).json({ erreur: 'Colle une adresse qui commence par https://' });
-    const meta = await stock.creerVideo({ titre: brut, origine: 'lien', url: brut, etat: 'attente' });
-    lancerTelechargement(meta.id, brut);
+    const { url, erreur } = verifierAdresse(req.body?.url);
+    if (erreur) return res.status(400).json({ erreur });
+    const meta = await stock.creerVideo({ titre: url, origine: 'lien', url, etat: 'attente' });
+    lancerTelechargement(meta.id, url);
     res.status(201).json(resume(meta));
   }));
 
@@ -406,8 +262,7 @@ export const creerApp = async () => {
     } catch { return null; }
   };
   app.get('/api/systeme', enveloppe(async (req, res) => {
-    const [ytdlp, ffmpeg] = await Promise.all([version(YTDLP, ['--version']), version(FFMPEG, ['-hide_banner', '-version'])]);
-    const cookies = Boolean(COOKIES) && await access(COOKIES).then(() => true, () => false);
+    const [ytdlp, ffmpeg, cookies] = await Promise.all([versionYtdlp(), version(FFMPEG, ['-hide_banner', '-version']), cookiesPresents()]);
     res.json({ ytdlp, ffmpeg: ffmpeg ? ffmpeg.replace(/^ffmpeg version (\S+).*/, '$1') : null, cookies });
   }));
   app.post('/api/systeme/maj-ytdlp', (req, res) => {
@@ -415,10 +270,7 @@ export const creerApp = async () => {
       type: 'maj-ytdlp', videoId: null, libelle: 'Mise à jour de yt-dlp',
       travail: async ({ progres, signal }) => {
         progres(0.1, 'Mise à jour de yt-dlp');
-        const { code, sortie, erreurs } = await executer(YTDLP, ['-U'], { signal });
-        const texte = `${sortie}\n${erreurs}`;
-        if (code !== 0) throw new Error(`Mise à jour impossible : ${derniereLigne(texte)}`);
-        return { message: derniereLigne(texte) };
+        return { message: await mettreAJour(signal) };
       },
     }));
   });
@@ -457,12 +309,7 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.a
   creerApp()
     .then((app) => {
       app.listen(port, hote, () => console.log(`Quiz Pub écoute sur ${hote}:${port}${process.env.MOT_DE_PASSE ? '' : ' (sans mot de passe)'}`));
-      // YouTube change souvent : yt-dlp se met à jour à chaque démarrage.
-      if (process.env.MAJ_YTDLP === '1') {
-        executer(YTDLP, ['-U'])
-          .then(({ sortie, erreurs }) => console.log(`yt-dlp : ${derniereLigne(`${sortie}\n${erreurs}`)}`))
-          .catch((e) => console.log(`yt-dlp : mise à jour impossible (${e.message})`));
-      }
+      majAuDemarrage();
     })
     .catch((e) => { console.error(e.message); process.exit(1); });
 }

@@ -1,7 +1,10 @@
-# Quiz Pub.
+# Deux sites, une seule image :
+#   - quiz-pub : le quiz de pubs (port 3012) ;
+#   - telechargement : vidéos et musiques YouTube à enregistrer (port 3014),
+#     qui peut envoyer une vidéo au quiz d'un clic.
 #
 # Avant le premier lancement (voir README) :
-#   - copier .env.exemple en .env et choisir le mot de passe ;
+#   - copier .env.exemple en .env ;
 #   - mkdir -p data cookies && chown 1000:1000 data
 
 services:
@@ -9,8 +12,9 @@ services:
     build: .
     container_name: quiz-pub
     restart: unless-stopped
-    env_file: .env
     environment:
+      MOT_DE_PASSE: ${MOT_DE_PASSE:-}
+      TAILLE_MAX_GO: ${TAILLE_MAX_GO:-4}
       # Facultatif : cookies YouTube, si YouTube bloque le serveur (voir README).
       YTDLP_COOKIES: /cookies/cookies.txt
     volumes:
@@ -21,3 +25,24 @@ services:
       # Toujours préfixer par 127.0.0.1 : sans lui, Docker ouvre le port sur
       # Internet en passant devant le pare-feu. Seul nginx doit le joindre.
       - "127.0.0.1:3012:3012"
+
+  telechargement:
+    build: .
+    container_name: telechargement-yt
+    restart: unless-stopped
+    command: ["node", "server/telechargement.js"]
+    environment:
+      PORT: 3014
+      # Dans le même dossier data que le quiz, sous-dossier à part.
+      DATA_DIR: /data/telechargements
+      MOT_DE_PASSE: ${TELECHARGEMENT_MOT_DE_PASSE:-}
+      CONSERVATION_JOURS: ${CONSERVATION_JOURS:-7}
+      # Le pont vers le quiz, par le réseau interne de Docker.
+      QUIZ_URL: http://quiz-pub:3012
+      QUIZ_MOT_DE_PASSE: ${MOT_DE_PASSE:-}
+      YTDLP_COOKIES: /cookies/cookies.txt
+    volumes:
+      - ./data:/data
+      - ./cookies:/cookies:ro
+    ports:
+      - "127.0.0.1:3014:3014"

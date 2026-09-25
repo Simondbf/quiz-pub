@@ -13,29 +13,47 @@ Un site pour préparer des quiz de pubs, protégé par un mot de passe si tu en 
 
 Les vidéos produites sont en MP4 (H.264 et AAC), lisibles partout et dans Resolve.
 
+## Le site de téléchargement
+
+Le même dépôt fait tourner un second site, plus simple, pour qui veut seulement
+récupérer une vidéo ou une musique : on colle un lien YouTube, on choisit
+**Vidéo** (MP4 jusqu'à 1080p) ou **Musique** (MP3 avec titre et pochette), puis
+on enregistre le fichier sur son téléphone ou son ordinateur.
+
+- Il utilise le même moteur que le quiz (`server/youtube.js`) : une mise à jour de yt-dlp ou des cookies YouTube servent aux deux.
+- **Le pont vers le quiz** : une vidéo téléchargée sur ce site part dans la bibliothèque du quiz d'un clic (« Envoyer au quiz »), où elle est analysée comme les autres. Le quiz garde aussi son propre champ « lien YouTube ».
+- Les fichiers restent 7 jours sur le serveur, puis sont effacés (réglable avec `CONSERVATION_JOURS`).
+- Mot de passe facultatif, distinct de celui du quiz : `TELECHARGEMENT_MOT_DE_PASSE`.
+
+Code : `server/telechargement.js` et `public-telechargement/`.
+
 ## Installation sur le VPS
 
-Tout tourne dans Docker. Le site écoute sur `127.0.0.1:3012` ; nginx le publie.
-Les commandes ci-dessous supposent le dossier `/root/quiz-pub` et le
-sous-domaine `quizpub.soleiljaune.be` : remplace-le par celui que tu veux.
+Tout tourne dans Docker, deux conteneurs pour une même image : le quiz sur
+`127.0.0.1:3012`, le téléchargement sur `127.0.0.1:3014` ; nginx les publie.
+Les commandes supposent le dossier `/root/quiz-pub` et les sous-domaines
+`quizpub.soleiljaune.be` et `telechargement.soleiljaune.be`.
 Ne touche pas au dossier `/root/compilationpub`, qui contient l'ancienne appli.
 
-### 1. Les fichiers et le mot de passe
+### 1. Les conteneurs
 
 ```bash
 cd /root/quiz-pub
-cp .env.exemple .env
-nano .env                      # MOT_DE_PASSE : à choisir, ou vide pour un site ouvert
 mkdir -p data cookies
-chown 1000:1000 data           # le conteneur n'a pas les droits root
+chown 1000:1000 data           # les conteneurs n'ont pas les droits root
 docker compose up -d --build
-docker compose logs --tail 20  # doit afficher « Quiz Pub écoute sur 0.0.0.0:3012 »
+docker compose logs --tail 20  # « Quiz Pub écoute sur 0.0.0.0:3012 » et « Téléchargement écoute sur 0.0.0.0:3014 »
 ```
 
-### 2. Le nom de domaine (Infomaniak)
+Sans rien d'autre, les deux sites sont sans mot de passe. Les réglages
+facultatifs (mots de passe, durée de conservation) se mettent dans un fichier
+`.env` à côté de `docker-compose.yml` : voir `.env.exemple` pour la liste.
+Après un changement : `docker compose up -d`.
 
-Dans la zone DNS de `soleiljaune.be`, ajoute un enregistrement **A**
-`quizpub` vers `178.105.235.106`.
+### 2. Les noms de domaine (Infomaniak)
+
+Dans la zone DNS de `soleiljaune.be`, ajoute deux enregistrements **A** vers
+`178.105.235.106` : `quizpub` et `telechargement`.
 
 ### 3. nginx et le certificat
 
@@ -45,8 +63,9 @@ Une fois l'enregistrement DNS en place, dans le dossier du site :
 bash deploiement/nginx.sh
 ```
 
-Le script installe la configuration nginx du dépôt (`deploiement/nginx.conf`),
-obtient le certificat HTTPS au premier lancement, puis recharge nginx. Rien à
+Pour chacun des deux sites, le script installe la configuration nginx du dépôt
+(`deploiement/nginx.conf` et `deploiement/nginx-telechargement.conf`), obtient
+le certificat HTTPS au premier lancement, puis recharge nginx. Rien à
 créer à la main dans `/etc/nginx`. Si nginx refuse la configuration, l'ancienne
 est remise en place ; si le certificat est refusé, c'est presque toujours que
 l'enregistrement DNS n'est pas encore visible : attendre un peu et relancer.

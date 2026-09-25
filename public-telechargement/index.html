@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="light dark">
+<title>Téléchargement</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect x='3' y='3' width='26' height='26' rx='7' fill='%231f5fbf'/%3E%3Cpath d='M16 8v12m-6-6 6 6 6-6M9 24h14' stroke='white' stroke-width='2.6' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div id="vue-connexion" class="vue" hidden>
+  <main class="page etroite">
+    <h1>Téléchargement</h1>
+    <form id="form-connexion">
+      <label class="champ"><span>Mot de passe</span><input type="password" id="mdp" autocomplete="current-password" required></label>
+      <button class="bouton principal" type="submit">Entrer</button>
+      <p id="connexion-erreur" class="erreur" role="alert"></p>
+    </form>
+  </main>
+</div>
+
+<div id="vue-principale" class="vue" hidden>
+  <main class="page">
+    <header class="entete">
+      <h1>Téléchargement</h1>
+      <button class="lien" type="button" id="deconnexion">Se déconnecter</button>
+    </header>
+    <p class="discret">Colle le lien d'une vidéo YouTube, choisis vidéo ou musique, puis enregistre le fichier.</p>
+
+    <form id="form-lien" class="carte-form">
+      <label class="champ" for="lien"><span>Lien</span></label>
+      <div class="ligne">
+        <input type="url" id="lien" placeholder="https://www.youtube.com/watch?v=…" autocomplete="off" inputmode="url" required>
+        <button class="bouton" type="button" id="coller" hidden>Coller</button>
+      </div>
+      <div class="choix" role="radiogroup" aria-label="Que télécharger ?">
+        <label class="option"><input type="radio" name="mode" value="video" checked><span><b>Vidéo</b> MP4, jusqu'à 1080p</span></label>
+        <label class="option"><input type="radio" name="mode" value="musique"><span><b>Musique</b> MP3, avec titre et pochette</span></label>
+      </div>
+      <button class="bouton principal large" type="submit" id="lancer">Télécharger</button>
+      <p id="lien-erreur" class="erreur" role="alert"></p>
+    </form>
+
+    <h2>Téléchargements</h2>
+    <p id="vide" class="discret" hidden>Rien pour l'instant.</p>
+    <ul id="liste" class="liste"></ul>
+
+    <footer class="pied discret">
+      <p id="conservation"></p>
+      <p><span id="version"></span> <button class="lien" type="button" id="maj">Mettre à jour yt-dlp</button></p>
+      <p id="maj-message" aria-live="polite"></p>
+    </footer>
+  </main>
+</div>
+<div id="annonce" class="annonce" role="status" aria-live="polite" hidden></div>
+<script type="module" src="app.js"></script>
+</body>
+</html>
