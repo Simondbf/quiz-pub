@@ -32,6 +32,10 @@ jobs:
           yt-dlp --version
       - run: npm ci
       - run: npm test
+      - name: Vérifier la configuration Docker et les scripts
+        run: |
+          docker compose config --quiet
+          bash -n deploiement/*.sh
 
   deploy:
     name: Deployer main sur VPS Hetzner
