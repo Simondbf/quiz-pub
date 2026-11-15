@@ -39,7 +39,7 @@ Code : `server/telechargement.js`, `server/youtube.js` et `public-telechargement
 ## Installation sur le VPS
 
 Tout tourne dans Docker, deux conteneurs pour une même image : le quiz sur
-`127.0.0.1:3012`, le téléchargement sur `127.0.0.1:3014` ; nginx les publie.
+`127.0.0.1:3012`, le téléchargement sur `127.0.0.1:3015` ; nginx les publie.
 Les commandes supposent le dossier `/root/quiz-pub` et les sous-domaines
 `quizpub.soleiljaune.be` et `telechargement.soleiljaune.be`.
 Ne touche pas au dossier `/root/compilationpub`, qui contient l'ancienne appli.
@@ -51,7 +51,7 @@ cd /root/quiz-pub
 mkdir -p data cookies
 chown 1000:1000 data           # les conteneurs n'ont pas les droits root
 docker compose up -d --build
-docker compose logs --tail 20  # « Quiz Pub écoute sur 0.0.0.0:3012 » et « YT téléchargeur écoute sur 0.0.0.0:3014 »
+docker compose logs --tail 20  # « Quiz Pub écoute sur 0.0.0.0:3012 » et « YT téléchargeur écoute sur 0.0.0.0:3015 »
 ```
 
 Sans rien d'autre, les deux sites sont sans mot de passe. Les réglages
