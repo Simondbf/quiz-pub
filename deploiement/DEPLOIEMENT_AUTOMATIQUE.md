@@ -14,7 +14,7 @@ Les changements sont testés dans GitHub Actions (sur une PR ou un push). **Seul
 4. Créer un compte SSH technique sans accès aux autres applications, par exemple `deploybot` (ne pas utiliser root pour la connexion SSH). Ajouter **sa clé publique** dédiée dans `/home/deploybot/.ssh/authorized_keys` (permissions strictes : répertoire 0700, fichier 0600). Éviter de l'ajouter au groupe `docker`, qui équivaut largement à root.
 5. Ajouter avec `sudo visudo -f /etc/sudoers.d/deploybot` :
    ```text
-   deploybot ALL=(root) NOPASSWD: /usr/local/sbin/deploy-quiz-pub, /usr/local/sbin/deploy-montage-video
+   deploybot ALL=(root) NOPASSWD: /usr/local/sbin/deploy-quiz-pub
    ```
    Ces scripts, détenus par root et acceptant uniquement un SHA Git complet, sont les seules commandes sudo accordées à ce compte. Revalider le fichier sudoers.
 
@@ -28,7 +28,7 @@ Dans **Settings → Secrets and variables → Actions**, renseigner les secrets 
 
 Dans **Variables**, ajouter `VPS_SSH_PORT` (optionnel, 22 par défaut) et, **uniquement après tests et installation du script**, `DEPLOY_ENABLED=true`.
 
-Pour Montage Vidéo, reproduire les mêmes secrets et variables dans le dépôt `montage-video`. Les deux projets ont des workflows indépendants.
+Montage Vidéo n'est pas inclus : ce déploiement concerne seulement Quiz Pub et le téléchargeur YouTube.
 
 ## Fonctionnement
 
@@ -38,4 +38,4 @@ Le script prend un verrou (pas de concurrence), refuse un dépôt avec des chang
 
 En cas d'échec, lire les logs GitHub Actions puis `docker compose ps`, `docker compose logs --tail=100`, `sudo nginx -t` et `bash deploiement/diagnostic.sh` sur le VPS. Le script ne supprime aucune donnée et n'effectue pas de rollback automatique. Ne pas publier les secrets ni les journaux contenant des données privées.
 
-Le bouton `workflow_dispatch` permet de relancer **les tests uniquement** ; pour redéployer, faire un nouveau push sur `main` après validation, ou déclencher manuellement le script avec le SHA courant depuis le VPS.
+Le bouton `workflow_dispatch` sur la branche **main** permet également de lancer un déploiement manuel **après les tests**, mais uniquement lorsque `DEPLOY_ENABLED=true` et les secrets SSH sont configurés. Tout push ultérieur sur `main` déploie automatiquement dans les mêmes conditions.
