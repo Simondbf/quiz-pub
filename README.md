@@ -125,3 +125,9 @@ npm install
 npm test        # tests du serveur (ffmpeg et yt-dlp doivent être installés)
 MOT_DE_PASSE=motdepasse-local DATA_DIR=./data npm start
 ```
+
+## Déploiement automatique depuis GitHub
+
+Le dépôt contient des tests automatiques et un workflow GitHub Actions qui déploie **uniquement les pushes sur `main`**, après validation des tests et lorsque `DEPLOY_ENABLED=true` est configuré. La première connexion SSH et les secrets GitHub nécessitent une mise en place manuelle : [guide de déploiement automatique](deploiement/DEPLOIEMENT_AUTOMATIQUE.md).
+
+Avant le premier déploiement, vérifier que le port `3015` est disponible sur le VPS : `3014` est réservé à **Comptes**. [Registre des ports du VPS](deploiement/PORTS_VPS.md). Pour analyser une panne 5xx : `bash deploiement/diagnostic.sh` depuis le VPS.
