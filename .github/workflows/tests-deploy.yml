@@ -1,4 +1,4 @@
-name: Tests et deploiement VPS — Quiz Pub et YT
+name: Tests CI — Quiz Pub et YT
 
 on:
   pull_request:
@@ -37,33 +37,3 @@ jobs:
           docker compose config --quiet
           bash -n deploiement/*.sh
 
-  deploy:
-    name: Deployer main sur VPS Hetzner
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    needs: tests
-    if: (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref == 'refs/heads/main' && vars.DEPLOY_ENABLED == 'true'
-    environment: production
-    steps:
-      - name: Connexion SSH vérifiée, sans agent tiers
-        env:
-          VPS_HOST: ${{ secrets.VPS_HOST }}
-          VPS_USER: ${{ secrets.VPS_SSH_USER }}
-          SSH_PRIVATE_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
-          SSH_KNOWN_HOSTS: ${{ secrets.VPS_SSH_KNOWN_HOSTS }}
-          SSH_PORT: ${{ vars.VPS_SSH_PORT || '22' }}
-        run: |
-          set -euo pipefail
-          test -n "$VPS_HOST" && test -n "$VPS_USER"
-          test -n "$SSH_PRIVATE_KEY" && test -n "$SSH_KNOWN_HOSTS"
-          [[ "$SSH_PORT" =~ ^[0-9]{1,5}$ ]]
-          [[ "$GITHUB_SHA" =~ ^[0-9a-f]{40}$ ]]
-          install -d -m 700 ~/.ssh
-          printf '%s\n' "$SSH_PRIVATE_KEY" > ~/.ssh/id_ed25519
-          chmod 600 ~/.ssh/id_ed25519
-          printf '%s\n' "$SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
-          chmod 600 ~/.ssh/known_hosts
-          ssh -i ~/.ssh/id_ed25519 -p "$SSH_PORT" \
-              -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes \
-              -o ConnectTimeout=15 "$VPS_USER@$VPS_HOST" \
-              "sudo -n /usr/local/sbin/deploy-quiz-pub '$GITHUB_SHA'"
