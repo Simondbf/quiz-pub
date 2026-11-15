@@ -126,8 +126,19 @@ npm test        # tests du serveur (ffmpeg et yt-dlp doivent être installés)
 MOT_DE_PASSE=motdepasse-local DATA_DIR=./data npm start
 ```
 
-## Déploiement automatique depuis GitHub
+## Mises à jour automatiques depuis le VPS
 
-Le dépôt contient des tests automatiques et un workflow GitHub Actions qui déploie **uniquement les pushes sur `main`**, après validation des tests et lorsque `DEPLOY_ENABLED=true` est configuré. La première connexion SSH et les secrets GitHub nécessitent une mise en place manuelle : [guide de déploiement automatique](deploiement/DEPLOIEMENT_AUTOMATIQUE.md).
+GitHub Actions exécute les tests sur chaque push ou pull request. Le VPS consulte GitHub **toutes les 3 minutes** via un timer systemd, puis récupère seulement les commits de `main` ayant réussi les tests. **Aucun secret GitHub ni accès SSH depuis GitHub Actions n'est nécessaire.**
 
-Avant le premier déploiement, vérifier que le port `3015` est disponible sur le VPS : `3014` est réservé à **Comptes**. [Registre des ports du VPS](deploiement/PORTS_VPS.md). Pour analyser une panne 5xx : `bash deploiement/diagnostic.sh` depuis le VPS.
+Pour installer le timer sur le VPS existant après la mise à jour du dépôt :
+
+```bash
+cd /root/quiz-pub
+git pull --ff-only
+sudo bash deploiement/install-auto-updates.sh
+sudo systemctl start quiz-pub-auto-update.service
+```
+
+Voir le [guide de mise à jour automatique](deploiement/DEPLOIEMENT_AUTOMATIQUE.md).
+
+Le port `3014` est réservé à **Comptes**, le téléchargeur utilise `3015`. [Registre des ports du VPS](deploiement/PORTS_VPS.md). Pour analyser une panne 5xx : `bash deploiement/diagnostic.sh` depuis le VPS.
