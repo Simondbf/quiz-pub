@@ -13,7 +13,7 @@ set -uo pipefail
 # Domaine, port du conteneur, fichier de configuration dans deploiement/.
 SITES=(
   "quizpub.soleiljaune.be 3012 nginx.conf"
-  "telechargement.soleiljaune.be 3014 nginx-telechargement.conf"
+  "telechargement.soleiljaune.be 3015 nginx-telechargement.conf"
 )
 
 DEPOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
