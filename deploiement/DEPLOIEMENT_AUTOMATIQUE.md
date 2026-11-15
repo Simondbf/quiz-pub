@@ -24,7 +24,7 @@ La deuxième commande installe une copie root-owned des scripts `deploiement/che
 ## Mécanisme et limites
 
 1. `git ls-remote` récupère le SHA courant de `origin/main` sans modifier les fichiers.
-2. Si ce SHA est différent du checkout local, le script interroge `https://api.github.com/repos/Simondbf/quiz-pub/actions/workflows/tests-deploy.yml/runs?branch=main&per_page=30` et cherche une exécution **push** sur le SHA précis, `completed/success`.
+2. Si ce SHA est différent du checkout local, le script interroge `https://api.github.com/repos/Simondbf/quiz-pub/actions/runs?branch=main&per_page=30` et cherche une exécution **push** sur le SHA précis, `completed/success`.
 3. Après confirmation, `/usr/local/sbin/deploy-quiz-pub SHA` vérifie encore le SHA, prend un verrou, refuse les modifications locales suivies, effectue `git merge --ff-only`, reconstruit uniquement les services du dépôt, attend leur santé HTTP et synchronise `/etc/vps/ports.md`.
 4. Les dossiers `data/`, `cookies/` et le fichier `.env` ne sont pas supprimés. Aucun conteneur étranger au projet n'est arrêté.
 5. Le script met à jour nginx **uniquement** si les configurations nginx ou leur installateur ont changé. Une erreur de déploiement ne provoque pas de restauration automatique : consulter les journaux.
