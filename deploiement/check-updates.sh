@@ -25,8 +25,7 @@ import urllib.request
 
 sha = sys.argv[1]
 url = (
-    "https://api.github.com/repos/Simondbf/quiz-pub/actions/"
-    "workflows/tests-deploy.yml/runs?branch=main&per_page=30"
+    "https://api.github.com/repos/Simondbf/quiz-pub/actions/runs?branch=main&per_page=30"
 )
 req = urllib.request.Request(
     url,
@@ -45,6 +44,7 @@ except (OSError, ValueError) as err:
 runs = [
     r for r in data.get("workflow_runs", [])
     if r.get("head_sha") == sha and r.get("event") == "push"
+    and r.get("path") == ".github/workflows/tests-deploy.yml"
 ]
 if not runs:
     print("Tests GitHub absents ou en attente, déploiement différé.")
