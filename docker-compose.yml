@@ -1,6 +1,6 @@
 # Deux sites, une seule image :
 #   - quiz-pub : le quiz de pubs (port 3012) ;
-#   - telechargement : le YT téléchargeur, vidéos et musiques à enregistrer (port 3014),
+#   - telechargement : le YT téléchargeur, vidéos et musiques à enregistrer (port 3015),
 #     qui peut envoyer une vidéo au quiz d'un clic.
 #
 # Avant le premier lancement (voir README) :
@@ -12,6 +12,12 @@ services:
     build: .
     container_name: quiz-pub
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3012/api/session', {signal: AbortSignal.timeout(3000)}).then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
     environment:
       MOT_DE_PASSE: ${MOT_DE_PASSE:-}
       TAILLE_MAX_GO: ${TAILLE_MAX_GO:-4}
@@ -32,9 +38,15 @@ services:
     build: .
     container_name: telechargement-yt
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3015/api/session', {signal: AbortSignal.timeout(3000)}).then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
     command: ["node", "server/telechargement.js"]
     environment:
-      PORT: 3014
+      PORT: 3015
       # Dans le même dossier data que le quiz, sous-dossier à part.
       DATA_DIR: /data/telechargements
       MOT_DE_PASSE: ${TELECHARGEMENT_MOT_DE_PASSE:-}
@@ -48,4 +60,4 @@ services:
       - ./data:/data
       - ./cookies:/cookies:ro
     ports:
-      - "127.0.0.1:3014:3014"
+      - "127.0.0.1:3015:3015"
